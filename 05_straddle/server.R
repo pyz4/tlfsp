@@ -74,8 +74,8 @@ shinyServer(function(input, output, session) {
             apply(MARGIN=2, FUN=function(x) x - x[1]) %>>%
             apply(MARGIN=2, FUN=cumsum) %>>%
             apply(MARGIN=2, FUN=exp) %>>%
-            (. %*% diag(c(input$portfolio_size, -input$hedge_size))) %>>%
             apply(MARGIN=2, FUN=function(x) x - x[1]) %>>%
+            (. %*% diag(c(input$portfolio_size, -input$hedge_size))) %>>%
             (merge.xts(., combined=as.xts(rowSums(., na.rm=TRUE))))
 
         plotReturn(combined, .combine='identity', scales=list(cex=1.5)

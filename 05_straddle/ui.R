@@ -6,6 +6,7 @@ shinyUI(fluidPage(
 
   # Application title
   titlePanel("§ 1092. Straddles"),
+  wellPanel(tags$div("library(shiny); runGitHub(repo='tlfsp', username='pyz4', subdir='05_straddle')")),
 
   # Sidebar with controls to select the random distribution type
   # and number of observations to generate. Note the use of the
