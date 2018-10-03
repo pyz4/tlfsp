@@ -26,11 +26,15 @@ shinyServer(function(input, output, session) {
         marginal_rate <- input$marginal_rate
         capital_gains_rate <- input$capital_gains_rate
         
-        xts.pfo <- pfo()
-        xts.hedge <- hedge()
-
+        merge(pfo(), hedge()) %>>%
+            na.trim("left", "any") %>>%
+            apply(MARGIN=2, FUN=function(x) x - first(x)) %>>%
+            reclass(pfo()) %>>%
+            (~ xts.pfo <- .[,1]) %>>%
+            (~ xts.hedge <- .[,2])
+            
         xts.hedge_ret_y <- apply.yearly(xts.hedge, sum)
-
+        
         xts.hedge_ret <- Reduce(recognize, as.vector(xts.hedge_ret_y), init=Inf, accumulate=TRUE) %>>%
           tail(-1) %>>%
           exp %>>%
@@ -43,29 +47,40 @@ shinyServer(function(input, output, session) {
           `*`(apply.yearly(cumsum(xts.pfo), first)) %>>%
           exp %>>%
           na.locf
-          
+        
         xts.losses <- merge(xts.hedge_size, xts.hedge_ret) %>>% 
             apply(MARGIN=1, FUN=function(x) prod(x) - x[1]) %>>% 
             reclass(xts.hedge_ret)
+        xts.losses <- c(pmax(0, head(xts.losses, -1)), last(xts.losses)) %>>%
+            (. * input$hedge_size) %>>%
+            reclass(xts.losses)
         colnames(xts.losses) <- 'loss'
-        xts.losses <- rbind(head(xts.losses, -1) %>>% pmax(0), last(xts.losses))
-    
-        xts(exp(sum(xts.pfo))-1, order.by=last(index(xts.pfo))) %>>%
-            merge(-xts.losses) %>>%
+        
+        xts.gains <- xts(exp(sum(xts.pfo))-1, order.by=last(index(xts.pfo))) * input$portfolio_size
+        colnames(xts.gains) <- 'gain'
+        
+        merge(xts.gains, -xts.losses) %>>%
             as.data.table %>>%
             (.[, tax_hedge := -(`loss` * marginal_rate)]) %>>%
-            (.[, tax_portfolio := -(`.` * capital_gains_rate)]) %>>%
+            (.[, tax_portfolio := -(`gain` * capital_gains_rate)]) %>>%
             melt.data.table(id.vars='index') %>>%
             (.[, type := ifelse(variable %in% c("tax_hedge", "tax_portfolio"), "Tax", "Realized Gains")])
     })
     
     output$returns <- renderPlot({
 
-        combined <- merge(portfolio=pfo(), hedge=-hedge()) %>>%
-            (merge(., combined=rowSums(., na.rm=TRUE)))
+        combined <- merge(portfolio=pfo(), hedge=hedge()) %>>%
+            na.trim("left", "any") %>>%
+            apply(MARGIN=2, FUN=function(x) x - x[1]) %>>%
+            apply(MARGIN=2, FUN=cumsum) %>>%
+            apply(MARGIN=2, FUN=exp) %>>%
+            (. %*% diag(c(input$portfolio_size, -input$hedge_size))) %>>%
+            apply(MARGIN=2, FUN=function(x) x - x[1]) %>>%
+            (merge.xts(., combined=as.xts(rowSums(., na.rm=TRUE))))
 
-        plotReturn(combined, .combine='sum', scales=list(cex=1.5)
-            , auto.key = list(columns = 3)
+        plotReturn(combined, .combine='identity', scales=list(cex=1.5)
+            , col = c("firebrick3", "darkgray", "steelblue")
+            , auto.key = list(columns = 3, text=c("Portfolio", "Hedge", "Combined"))
             , ylab = list(label = "Returns", cex = 1.5))
     })
     
@@ -82,7 +97,7 @@ shinyServer(function(input, output, session) {
               ans$left$labels$labels <- formatSi('$', 3, bln.parens=TRUE)(ans$left$labels$at)
               ans }
             , auto.key = list(columns=4, text=c("Portfolio", "Hedge", "Hedge (Tax)", "Portfolio (Tax)"))
-            , scales = list(cex=1.5, x = list(rot=45), y = list(rot=0, tck = FALSE))
+            , scales = list(cex=1.5, x = list(rot=45), y = list(rot=0, tck = FALSE, relation='free'))
             , layout = c(1,2)
             , as.table=TRUE
             , ylab = NULL
@@ -114,6 +129,7 @@ shinyServer(function(input, output, session) {
         ylims <- coalesce(xts.hedge, 0) %>>% (c(min(.) * .9, max(.) * 1.1))
         
         xyplot(xts.hedge ~ xts.pfo
+            , col = 'steelblue'
             , type = c('p', 'r'), col.line = 'firebrick3'
             , aspect = 1
             , scales = list(cex = 1.5)
@@ -128,53 +144,19 @@ shinyServer(function(input, output, session) {
     })
     
     output$substantial_overlap_text <- renderText({
-        sprintf("1.246-5(c) overlap: %f", max(substantial_overlap(pfo_components(), hedge_components())))
+        sprintf("1.246-5(c) overlap: %f", max(
+            substantial_overlap(pfo_components(), input$portfolio_size
+                , hedge_components(), input$hedge_size)))
     })
     
     output$substantial_overlap <- renderDataTable({
         
-        dt.pfo <- data.table(ticker=names(pfo_components()), wt = unlist(pfo_components())[names(pfo_components())] %>>% (. / sum(.)), key='ticker')
-        dt.hedge <- data.table(ticker=names(hedge_components()), wt = unlist(hedge_components())[names(hedge_components())] %>>% (. / sum(.)), key='ticker')
+        dt.pfo <- data.table(ticker=names(pfo_components()), wt = unlist(pfo_components())[names(pfo_components())] %>>% (. / sum(.) * input$portfolio_size), key='ticker')
+        dt.hedge <- data.table(ticker=names(hedge_components()), wt = unlist(hedge_components())[names(hedge_components())] %>>% (. / sum(.) * input$hedge_size), key='ticker')
         
         dt <- merge(dt.pfo, dt.hedge, all=TRUE, suffixes = c("_pfo", "_hedge"))
         dt[, sub := pmin(wt_pfo, wt_hedge) %>>% coalesce(0)]
         dt        
     })
-    
-    
-    # output$hedge <- renderPlot({
-    #     symbols <- input$hedge
-    #     hedge <- (-1) * get_returns(symbols) # shorting
-    #     plotReturn(hedge, .combine='compound', main = paste("Hedge: ", paste(symbols, collapse=','), sep=" "))
-    # })
-  # Generate a plot of the data.
-  # output$traceplot <- renderPlot({
-  #   make_traceplot <- function() {
-  #     load(filename)
-  #     if (length(randomness) != input$obs){
-  #       generate_randomness(input$obs)
-  #       load(filename)
-  #       nobs <- length(randomness)
-  #     }
-  #     nobs <- length(randomness)
-  #     y <- rep(0, nobs)
-  #     y[1] <- randomness[1]
-  #     y[2] <- input$theta1 * randomness[1]  + randomness[2]
-  #     for (t in 3:nobs){
-  #       y[t] <- input$theta1 * randomness[t-1] +  input$theta2 * randomness[t-2] + randomness[t]
-  #     }
-  #     dataset <- data.frame(Time = seq(1:nobs), series = "y", y)
-  #     ggplot(data=dataset, aes(x=Time,y=y, group = series)) + geom_line() + theme(legend.position="none")
-  #   }
-  #   if(input$goButton) {            # if user presses Re-Simulate
-  #     make_traceplot()
-  #   } else    {                                    # so graph appears on startup
-  #     make_traceplot()
-  #   }
-  # })
-
-  # observeEvent(input$goButton, {
-  #   generate_randomness(input$obs)
-  # })
 
 })

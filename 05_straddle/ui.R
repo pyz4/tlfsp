@@ -15,10 +15,12 @@ shinyUI(fluidPage(
         numericInput(inputId="discount_rate", label="Discount Rate (annualized)", value=".025"),
         numericInput(inputId="marginal_rate", label="Marginal Tax Rate", value=".35"),
         numericInput(inputId="capital_gains_rate", label="Capital Gains Rate", value=".15"),
+        numericInput(inputId="portfolio_size", label="Portfolio Notional ($)", value=1),
         textAreaInput(inputId="portfolio"
             , label="Portfolio Constituents and Weights"
             , value=default_portfolio
             , rows=10),
+        numericInput(inputId="hedge_size", label="Hedge Notional ($)", value=1),
         textAreaInput(inputId="hedge"
             , label="Hedge Constituents and Weights"
             , value=default_portfolio

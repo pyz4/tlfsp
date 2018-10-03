@@ -53,13 +53,13 @@ recognize <- function(x1, x2) {
 #   else { Recall(pfo, Map(function(x) pmax(0, x * (1 - .step / sum(unlist(hedge)))), hedge), .step=.step) } # reduce size of position
 # }
 
-substantial_overlap <- function(pfo, hedge) {
+substantial_overlap <- function(pfo, pfo_size, hedge, hedge_size) {
   sapply(lapply(10:1, function(x) Map(function(x) x*.1, hedge))
     , function(pfo, hedge) {
       if (sum(unlist(hedge), na.rm=TRUE) <= 0) return(FALSE)
       
-      dt.pfo <- data.table(ticker=names(pfo), wt = unlist(pfo)[names(pfo)] %>>% (. / sum(.)), key='ticker')
-      dt.hedge <- data.table(ticker=names(hedge), wt = unlist(hedge)[names(hedge)] %>>% (. / sum(.)), key='ticker')
+      dt.pfo <- data.table(ticker=names(pfo), wt = unlist(pfo)[names(pfo)] %>>% (. / sum(.) * pfo_size), key='ticker')
+      dt.hedge <- data.table(ticker=names(hedge), wt = unlist(hedge)[names(hedge)] %>>% (. / sum(.) * hedge_size), key='ticker')
       
       dt <- merge(dt.pfo, dt.hedge, all=TRUE, suffixes = c("_pfo", "_hedge"))
       dt[, subportfolio := pmin(wt_pfo, wt_hedge) %>>% coalesce(0)]
@@ -69,6 +69,24 @@ substantial_overlap <- function(pfo, hedge) {
       # if (overlap >= .7) { return(TRUE) }
       # else { Recall(pfo, Map(function(x) pmax(0, x * (1 - .step / sum(unlist(hedge)))), hedge), .step=.step) } # reduce size of position
   }, pfo=pfo)
+}
+
+#' @title coalesce function
+#' @description coalesce vectors element at a time. Exactly the same as the
+#' COALESCE function available in mysql
+#'
+#' @param ... vectors
+#'
+#' @examples
+#' vec.A <- c(1, 2, NA, 3, 4, NA, 6)
+#' vec.B <- c(2, NA, NA, NA, 7, 8, 9)
+#' coalesce(vec.B, vec.A) # c(2, 2, NA, 3, 7, 8, 9)
+#' @return singular vector
+coalesce <- function(...) {
+  lst <- list(...)
+  if(length(lst) == 0) return(NULL)
+  if(length(lst[[1]]) == 0) return(lst[[1]])
+  Reduce(function(x,y) ifelse(is.na(x), y, x), list(...))
 }
 
 
