@@ -200,3 +200,16 @@ formatSi <- function(chr.prefix ='', int.signif = 3L, bln.parens = FALSE
         }
     }
 }
+
+#' @title Hand-picked color palette
+#' @description 5 hand-picked colors and remainder randomly selected from colors(distinct = TRUE)
+#' @param n integer or numeric specifying the number of colors to be selected
+#'
+#' @import grDevices
+#' @export
+pzColors <- function(n) {
+  default <- c('firebrick3', 'steelblue', 'forestgreen', 'tan1', 'slategrey')
+  if (n <= 5) return(default)
+
+  c(default, sample(setdiff(colors(distinct = TRUE), default), n - 5, rep = FALSE))
+}
