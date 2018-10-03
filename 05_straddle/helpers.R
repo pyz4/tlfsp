@@ -4,6 +4,7 @@ library(devtools)
 library(quantmod)
 library(xts)
 library(yaml)
+library(data.table)
 # load_all("~/Documents/pz")
 
 UNIVERSE <- yaml.load_file("universe.yml")
