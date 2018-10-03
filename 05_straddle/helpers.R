@@ -213,3 +213,28 @@ pzColors <- function(n) {
 
   c(default, sample(setdiff(colors(distinct = TRUE), default), n - 5, rep = FALSE))
 }
+
+#' Basic function to calculate cumulative returns
+#'
+#'
+#' @param vec.ret numeric vector of individual returns per unit time
+#' @param .combine character string indicates whether individual returns should be compound or sum
+#'
+#' @return numeric vector
+#'
+#'
+#' @examples
+#' vec.month_returns <- rnorm(24, mean = .1, sd = .3)
+#' cumReturn(vec.month_returns, .combine = 'compound')
+#'
+#' @export
+
+cumReturn <- function(vec.ret, .combine = c('compound', 'sum', 'identity')) {
+  # replace NA with 0
+  vec.ret <- coalesce(vec.ret, 0)
+  switch(.combine
+    , 'compound' = cumprod(1 + vec.ret)
+    , 'sum' = cumsum(vec.ret)
+    , 'identity' = vec.ret
+    )
+}
